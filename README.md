@@ -380,7 +380,7 @@ comprehensive-microservices-platform/
 │       └── model/
 │
 ├── notification-service/      # Async Consumer
-│   └── src/main/java/com/arval/notification/
+│   └── src/main/java/com/notification/
 │       ├── NotificationServiceApplication.java
 │       ├── listener/           # RabbitMQ consumers
 │       ├── service/
