@@ -1,0 +1,142 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: payment-service
+  
+  datasource:
+    url: jdbc:h2:mem:paymentdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+# EUREKA CLIENT CONFIGURATION
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true
+
+# RESILIENCE4J COMPREHENSIVE CONFIGURATION
+resilience4j:
+  # CIRCUIT BREAKER CONFIGURATION
+  circuitbreaker:
+    configs:
+      default:
+        # Failure rate threshold (50% = circuit opens if 50% of calls fail)
+        failure-rate-threshold: 50
+        # Wait 10 seconds before trying again (OPEN -> HALF_OPEN)
+        wait-duration-in-open-state: 10s
+        # Sliding window: last 10 calls
+        sliding-window-size: 10
+        # Minimum calls before calculating failure rate
+        minimum-number-of-calls: 5
+        # Permitted calls in HALF_OPEN state
+        permitted-number-of-calls-in-half-open-state: 3
+        # Automatically transition from OPEN to HALF_OPEN
+        automatic-transition-from-open-to-half-open-enabled: true
+        # Exceptions that count as failures
+        record-exceptions:
+          - java.lang.RuntimeException
+    instances:
+      paymentProcessing:
+        baseConfig: default
+  
+  # RETRY CONFIGURATION
+  retry:
+    configs:
+      default:
+        # Maximum retry attempts
+        max-attempts: 3
+        # Wait duration between retries
+        wait-duration: 1s
+        # Enable exponential backoff
+        enable-exponential-backoff: true
+        # Exponential backoff multiplier
+        exponential-backoff-multiplier: 2
+        # Maximum wait duration
+        max-wait-duration: 10s
+        # Retry on these exceptions
+        retry-exceptions:
+          - java.lang.RuntimeException
+    instances:
+      paymentProcessing:
+        baseConfig: default
+  
+  # BULKHEAD CONFIGURATION (Thread Pool Isolation)
+  bulkhead:
+    configs:
+      default:
+        # Maximum concurrent calls
+        max-concurrent-calls: 10
+        # Maximum wait time for thread from pool
+        max-wait-duration: 0
+        # Thread pool configuration
+        thread-pool:
+          # Core thread pool size
+          core-thread-pool-size: 5
+          # Maximum thread pool size
+          max-thread-pool-size: 10
+          # Queue capacity
+          queue-capacity: 5
+    instances:
+      paymentProcessing:
+        baseConfig: default
+  
+  # RATE LIMITER CONFIGURATION
+  ratelimiter:
+    configs:
+      default:
+        # Limit refresh period (replenishes permits)
+        limit-refresh-period: 10s
+        # Number of permits per period
+        limit-for-period: 5
+        # Timeout for acquiring permit
+        timeout-duration: 5s
+    instances:
+      paymentProcessing:
+        baseConfig: default
+  
+  # TIME LIMITER CONFIGURATION
+  timelimiter:
+    configs:
+      default:
+        # Timeout duration
+        timeout-duration: 5s
+        # Cancel running future on timeout
+        cancel-running-future: true
+    instances:
+      paymentProcessing:
+        baseConfig: default
+
+# ACTUATOR CONFIGURATION
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,circuitbreakers,retries,bulkheads,ratelimiters,timelimiters
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# LOGGING
+logging:
+  level:
+    com.arval.payment: DEBUG
+    io.github.resilience4j: DEBUG

@@ -1,0 +1,93 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      # GATEWAY ROUTING CONFIGURATION
+      # Routes define how requests are forwarded to microservices
+      routes:
+        # Order Service Route
+        - id: order-service
+          uri: lb://order-service  # 'lb://' means load-balanced discovery via Eureka
+          predicates:
+            - Path=/api/orders/**
+          filters:
+            - StripPrefix=2  # Removes '/api/orders' from path before forwarding
+            - name: AuthenticationFilter  # Custom authentication filter
+
+        # Payment Service Route
+        - id: payment-service
+          uri: lb://payment-service
+          predicates:
+            - Path=/api/payments/**
+          filters:
+            - StripPrefix=2
+            - name: AuthenticationFilter
+
+        # Inventory Service Route
+        - id: inventory-service
+          uri: lb://inventory-service
+          predicates:
+            - Path=/api/inventory/**
+          filters:
+            - StripPrefix=2
+            - name: AuthenticationFilter
+
+        # Notification Service Route
+        - id: notification-service
+          uri: lb://notification-service
+          predicates:
+            - Path=/api/notifications/**
+          filters:
+            - StripPrefix=2
+            - name: AuthenticationFilter
+
+        # Authentication Service Route (Public - no auth required)
+        - id: auth-service
+          uri: lb://order-service  # Using order-service for auth endpoints
+          predicates:
+            - Path=/api/auth/**
+          filters:
+            - StripPrefix=2
+
+      # GLOBAL CORS CONFIGURATION
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+            allowCredentials: true
+
+# EUREKA CLIENT CONFIGURATION
+# Connects to Eureka server for service discovery
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true
+
+# JWT SECRET KEY
+jwt:
+  secret: mySecretKeyForJWTTokenGenerationAndValidationMustBeAtLeast256Bits
+
+# ACTUATOR CONFIGURATION
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    health:
+      show-details: always

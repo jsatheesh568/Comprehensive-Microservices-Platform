@@ -1,0 +1,20 @@
+package com.notification;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
+
+/**
+ * NOTIFICATION SERVICE APPLICATION
+ * 
+ * Handles asynchronous notifications via RabbitMQ.
+ * Demonstrates async microservices communication pattern.
+ */
+@SpringBootApplication
+@EnableDiscoveryClient
+public class NotificationServiceApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(NotificationServiceApplication.class, args);
+    }
+}

@@ -1,0 +1,32 @@
+server:
+  port: 8761
+
+spring:
+  application:
+    name: eureka-server
+
+# EUREKA SERVER CONFIGURATION
+eureka:
+  instance:
+    hostname: localhost
+  client:
+    # This server doesn't need to register itself with another Eureka server
+    # since it IS the Eureka server
+    register-with-eureka: false
+    fetch-registry: false
+    # Disable self-preservation mode for development (allows faster failure detection)
+    enable-self-preservation: false
+  server:
+    # Wait time in milliseconds before removing an instance from registry
+    eviction-interval-timer-in-ms: 5000
+
+# ACTUATOR CONFIGURATION
+# Exposes health and info endpoints for monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always

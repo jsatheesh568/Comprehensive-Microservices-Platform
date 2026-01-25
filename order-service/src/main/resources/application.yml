@@ -1,0 +1,114 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: order-service
+  
+  # DATASOURCE CONFIGURATION
+  datasource:
+    url: jdbc:h2:mem:orderdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  
+  # JPA/HIBERNATE CONFIGURATION
+  jpa:
+    hibernate:
+      ddl-auto: create-drop  # Creates tables on startup, drops on shutdown
+    show-sql: true  # Logs SQL queries (useful for debugging)
+    properties:
+      hibernate:
+        format_sql: true  # Formats SQL in logs
+  
+  # RABBITMQ CONFIGURATION - Asynchronous Communication
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    # Connection pool settings
+    listener:
+      simple:
+        retry:
+          enabled: true
+          max-attempts: 3
+
+# EUREKA CLIENT CONFIGURATION
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 30
+    lease-expiration-duration-in-seconds: 90
+
+# RESILIENCE4J CONFIGURATION
+# These configurations apply to @CircuitBreaker and @Retry annotations
+
+resilience4j:
+  # CIRCUIT BREAKER CONFIGURATION
+  circuitbreaker:
+    configs:
+      default:
+        # Failure rate threshold (percentage)
+        failure-rate-threshold: 50
+        # Wait duration before transitioning from OPEN to HALF_OPEN
+        wait-duration-in-open-state: 10s
+        # Sliding window size (number of calls)
+        sliding-window-size: 10
+        # Minimum number of calls before calculating failure rate
+        minimum-number-of-calls: 5
+        # Permitted number of calls in HALF_OPEN state
+        permitted-number-of-calls-in-half-open-state: 3
+        # Automatically transition from OPEN to HALF_OPEN
+        automatic-transition-from-open-to-half-open-enabled: true
+    instances:
+      paymentService:
+        baseConfig: default
+      inventoryService:
+        baseConfig: default
+  
+  # RETRY CONFIGURATION
+  retry:
+    configs:
+      default:
+        # Maximum number of retry attempts
+        max-attempts: 3
+        # Wait duration between retries
+        wait-duration: 1s
+        # Enable exponential backoff
+        enable-exponential-backoff: true
+        # Exponential backoff multiplier
+        exponential-backoff-multiplier: 2
+        # Maximum wait duration
+        max-wait-duration: 10s
+    instances:
+      paymentService:
+        baseConfig: default
+      inventoryService:
+        baseConfig: default
+
+# ACTUATOR CONFIGURATION
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,circuitbreakers,retries
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# LOGGING CONFIGURATION
+logging:
+  level:
+    com.arval.orders: DEBUG
+    org.springframework.cloud.openfeign: DEBUG
+    io.github.resilience4j: DEBUG
