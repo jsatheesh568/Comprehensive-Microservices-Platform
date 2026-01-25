@@ -66,7 +66,7 @@ A complete Spring Boot microservices platform demonstrating enterprise-level pat
 ### 3. **Spring Boot Security**
 - **What**: Authentication and authorization framework
 - **Why**: Protect APIs, manage user access
-- **Implementation**: `api-gateway/src/main/java/com/arval/gateway/config/SecurityConfig.java`
+- **Implementation**: `api-gateway/src/main/java/com/gateway/config/SecurityConfig.java`
 - **Concepts**: 
   - JWT token validation
   - Role-based access control
@@ -343,11 +343,11 @@ curl http://localhost:8082/actuator/bulkheads
 ```
 comprehensive-microservices-platform/
 ├── eureka-server/              # Service Discovery
-│   └── src/main/java/com/arval/eureka/
+│   └── src/main/java/com/eureka/
 │       └── EurekaServerApplication.java
 │
 ├── api-gateway/                # API Gateway with Security
-│   └── src/main/java/com/arval/gateway/
+│   └── src/main/java/com/gateway/
 │       ├── ApiGatewayApplication.java
 │       ├── config/
 │       │   └── SecurityConfig.java
@@ -355,7 +355,7 @@ comprehensive-microservices-platform/
 │           └── AuthenticationFilter.java
 │
 ├── order-service/              # Saga Orchestrator
-│   └── src/main/java/com/arval/orders/
+│   └── src/main/java/com/orders/
 │       ├── OrderServiceApplication.java
 │       ├── controller/
 │       ├── service/            # Saga pattern implementation
@@ -365,7 +365,7 @@ comprehensive-microservices-platform/
 │       └── config/             # RabbitMQ config
 │
 ├── payment-service/            # Resilience4j Patterns
-│   └── src/main/java/com/arval/payment/
+│   └── src/main/java/com/payment/
 │       ├── PaymentServiceApplication.java
 │       ├── controller/
 │       ├── service/            # All resilience patterns
@@ -373,7 +373,7 @@ comprehensive-microservices-platform/
 │       └── repository/
 │
 ├── inventory-service/         # Saga Participant
-│   └── src/main/java/com/arval/inventory/
+│   └── src/main/java/com/inventory/
 │       ├── InventoryServiceApplication.java
 │       ├── controller/
 │       ├── service/            # Reserve/Release operations
