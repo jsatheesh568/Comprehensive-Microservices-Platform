@@ -2,14 +2,16 @@ package com.orders.client;
 
 import com.orders.dto.PaymentRequest;
 import com.orders.dto.PaymentResponse;
+import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
+import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
 /**
- * PAYMENT SERVICE CLIENT - Feign Client
+ * PAYMENT SERVICE CLIENT - Feign Client with Enhanced Resilience
  * 
  * This interface defines how to communicate with the Payment Service.
  * 
@@ -26,19 +28,24 @@ import org.springframework.web.bind.annotation.RequestBody;
  * 
  * RESILIENCE4J INTEGRATION:
  * @CircuitBreaker - Prevents cascading failures by opening circuit when service is down
- * @Retry - Automatically retries failed requests
+ * @Retry - Automatically retries failed requests with backoff
+ * @Bulkhead - Isolates payment calls in thread pool to prevent resource starvation
+ * @TimeLimiter - Fails fast if payment service is slow (connection timeout, processing delay)
  * 
- * HOW IT WORKS:
- * 1. Feign generates HTTP client implementation at runtime
- * 2. Uses Eureka to find Payment Service instances
- * 3. Load balances requests across instances
- * 4. Resilience4j intercepts calls to add resilience patterns
+ * PATTERN STACKING ORDER (applied in reverse):
+ * TimeLimiter -> Bulkhead -> Retry -> CircuitBreaker -> Method
+ * 
+ * This ensures:
+ * 1. TimeLimiter prevents long waits
+ * 2. Bulkhead isolates threads
+ * 3. Retry handles transient failures
+ * 4. CircuitBreaker prevents cascade
  */
 @FeignClient(name = "payment-service", url = "http://localhost:8082")
 public interface PaymentServiceClient {
 
     /**
-     * PROCESS PAYMENT
+     * PROCESS PAYMENT - With Full Resilience Stack
      * 
      * @PostMapping - Maps this method to HTTP POST request
      *   The path is appended to the base URL from @FeignClient
@@ -54,35 +61,45 @@ public interface PaymentServiceClient {
      * 2. OPEN - Service is failing, requests fail fast without calling service
      * 3. HALF_OPEN - Testing if service recovered, allows limited requests
      * 
-     * @Retry - Retry Pattern
-     *   - name: Configuration name from application.yml
-     *   Automatically retries failed requests based on configuration
+     * @Retry - Retry Pattern with Exponential Backoff
+     *   - Automatically retries failed requests based on configuration
+     *   - Waits between retries to avoid overwhelming service
      * 
-     * RETRY STRATEGY:
-     * - Exponential backoff: Wait time increases exponentially between retries
-     * - Max attempts: Maximum number of retry attempts
-     * - Retryable exceptions: Which exceptions trigger retry
+     * @Bulkhead - Thread Pool Isolation
+     *   - Isolates payment calls in separate thread pool
+     *   - Prevents payment service from consuming all order service threads
+     *   - If bulkhead is full, fails fast
+     * 
+     * @TimeLimiter - Timeout Management
+     *   - Fails fast if payment service is slow
+     *   - Prevents order service from waiting indefinitely
      */
     @PostMapping("/api/payments/process")
     @CircuitBreaker(name = "paymentService", fallbackMethod = "processPaymentFallback")
     @Retry(name = "paymentService")
+    @Bulkhead(name = "paymentService", type = Bulkhead.Type.THREADPOOL)
+    @TimeLimiter(name = "paymentService")
     PaymentResponse processPayment(@RequestBody PaymentRequest request);
 
     /**
-     * FALLBACK METHOD
+     * FALLBACK METHOD - Process Payment
      * 
-     * Called when circuit breaker is open or service is unavailable.
-     * This prevents cascading failures and provides graceful degradation.
+     * Called when:
+     * - Circuit breaker is OPEN (payment service is failing)
+     * - All retry attempts exhausted
+     * - Bulkhead is full (too many concurrent payment requests)
+     * - TimeLimiter timeout exceeded (payment service is slow)
      * 
-     * FALLBACK PATTERN:
-     * - Returns default/error response instead of throwing exception
-     * - Prevents service unavailability from affecting entire system
-     * - Can return cached data or default values
+     * FALLBACK STRATEGY:
+     * - Returns failure response instead of throwing exception
+     * - Prevents cascading failures to order service
+     * - Prevents order service from hanging
+     * - Provides graceful degradation
      */
     default PaymentResponse processPaymentFallback(PaymentRequest request, Exception ex) {
         return PaymentResponse.builder()
                 .success(false)
-                .message("Payment service is currently unavailable. Please try again later.")
+                .message("Payment service is currently unavailable or timeout. Please try again later.")
                 .transactionId(null)
                 .build();
     }

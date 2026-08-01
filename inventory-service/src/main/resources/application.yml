@@ -36,17 +36,103 @@ eureka:
   instance:
     prefer-ip-address: true
 
-# ACTUATOR CONFIGURATION
+# RESILIENCE4J CONFIGURATION FOR INVENTORY SERVICE
+# This service is critical for order processing, so it needs strong resilience patterns
+resilience4j:
+  # CIRCUIT BREAKER - Prevents cascading failures from database or internal errors
+  circuitbreaker:
+    configs:
+      default:
+        # Opens if 60% of calls fail (inventory is critical, so higher threshold)
+        failure-rate-threshold: 60
+        # Wait 15s before attempting recovery
+        wait-duration-in-open-state: 15s
+        # Monitor last 10 calls
+        sliding-window-size: 10
+        # Need at least 5 calls before calculating failure rate
+        minimum-number-of-calls: 5
+        # Allow 2 calls in half-open state for recovery testing
+        permitted-number-of-calls-in-half-open-state: 2
+        # Automatically transition to half-open
+        automatic-transition-from-open-to-half-open-enabled: true
+        # Record these exceptions as failures
+        record-exceptions:
+          - java.lang.RuntimeException
+          - java.lang.Exception
+    instances:
+      inventoryProcessing:
+        baseConfig: default
+
+  # RETRY - For transient failures like temporary database issues
+  retry:
+    configs:
+      default:
+        # Retry up to 3 times on transient failures
+        max-attempts: 3
+        # Wait 500ms between retries
+        wait-duration: 500ms
+        # Use exponential backoff to avoid overwhelming system
+        enable-exponential-backoff: true
+        # Multiply wait time by 2 each retry (500ms, 1s, 2s)
+        exponential-backoff-multiplier: 2
+        # Maximum total wait time
+        max-wait-duration: 5s
+        # Only retry on transient exceptions
+        retry-exceptions:
+          - java.lang.RuntimeException
+          - org.springframework.dao.DataAccessException
+    instances:
+      inventoryProcessing:
+        baseConfig: default
+
+  # BULKHEAD - Isolates inventory operations in separate thread pool
+  # Prevents inventory service from consuming all application threads
+  bulkhead:
+    configs:
+      default:
+        # Allow up to 20 concurrent inventory operations
+        max-concurrent-calls: 20
+        # Don't wait for thread availability
+        max-wait-duration: 0
+        thread-pool:
+          # Start with 5 threads
+          core-thread-pool-size: 5
+          # Scale up to 15 threads if needed
+          max-thread-pool-size: 15
+          # Queue 10 requests if all threads busy
+          queue-capacity: 10
+    instances:
+      inventoryProcessing:
+        baseConfig: default
+
+  # TIME LIMITER - Prevents hanging operations
+  timelimiter:
+    configs:
+      default:
+        # Timeout inventory operations after 3 seconds
+        timeout-duration: 3s
+        # Cancel operation if timeout occurs
+        cancel-running-future: true
+    instances:
+      inventoryProcessing:
+        baseConfig: default
+
+# ACTUATOR CONFIGURATION - Expose resilience metrics
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,circuitbreakers,retries,bulkheads,timelimiters
   endpoint:
     health:
       show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
 
 # LOGGING
 logging:
   level:
     com.arval.inventory: DEBUG
+    io.github.resilience4j: DEBUG

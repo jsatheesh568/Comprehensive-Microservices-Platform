@@ -101,10 +101,15 @@ resilience4j:
       default:
         # Limit refresh period (replenishes permits)
         limit-refresh-period: 10s
-        # Number of permits per period
+        # Number of permits per period (throughput control)
         limit-for-period: 5
         # Timeout for acquiring permit
         timeout-duration: 5s
+      highThroughput:
+        # For high volume scenarios
+        limit-refresh-period: 5s
+        limit-for-period: 10
+        timeout-duration: 3s
     instances:
       paymentProcessing:
         baseConfig: default

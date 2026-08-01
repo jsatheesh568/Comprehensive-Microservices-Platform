@@ -2,10 +2,13 @@ package com.orders.service;
 
 import com.orders.client.InventoryServiceClient;
 import com.orders.client.PaymentServiceClient;
-import com.arval.orders.dto.*;
 import com.orders.dto.*;
 import com.orders.model.Order;
 import com.orders.repository.OrderRepository;
+import io.github.resilience4j.bulkhead.annotation.Bulkhead;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
+import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -72,9 +75,18 @@ public class OrderService {
     private final RabbitTemplate rabbitTemplate;
 
     /**
-     * CREATE ORDER - Saga Orchestration
+     * CREATE ORDER - Saga Orchestration with Enhanced Resilience
      * 
-     * This method orchestrates the distributed transaction using Saga pattern.
+     * This method orchestrates the distributed transaction using Saga pattern
+     * with full resilience support.
+     * 
+     * RESILIENCE PATTERNS APPLIED:
+     * - @Bulkhead: Isolates order creation in separate thread pool
+     *   Prevents order service from starving other operations
+     * - @TimeLimiter: Ensures saga completes within timeout
+     *   Prevents hanging orders if downstream services are slow
+     * - @CircuitBreaker: Stops attempting if order orchestration is failing
+     * - @Retry: Retries on transient failures in orchestration
      * 
      * @Transactional - Ensures database operations are atomic.
      *   If an exception occurs, all database changes are rolled back.
@@ -95,6 +107,10 @@ public class OrderService {
      * - Return error response
      */
     @Transactional
+    @Bulkhead(name = "orderOrchestration", type = Bulkhead.Type.THREADPOOL)
+    @TimeLimiter(name = "orderOrchestration")
+    @CircuitBreaker(name = "orderOrchestration", fallbackMethod = "createOrderFallback")
+    @Retry(name = "orderOrchestration")
     public Order createOrder(CreateOrderRequest request) {
         log.info("Starting order creation saga for user: {}, product: {}, quantity: {}",
                 request.getUserId(), request.getProductId(), request.getQuantity());
@@ -250,5 +266,31 @@ public class OrderService {
      */
     public java.util.List<Order> getOrdersByUserId(Long userId) {
         return orderRepository.findByUserId(userId);
+    }
+
+    /**
+     * FALLBACK METHOD - Order Creation
+     * 
+     * Called when:
+     * - Bulkhead is exhausted (too many concurrent orders)
+     * - TimeLimiter timeout exceeded (saga took too long)
+     * - Circuit breaker is open (too many order failures)
+     * - Retry exhausted (all retries failed)
+     * 
+     * This graceful degradation prevents cascade failures.
+     */
+    public Order createOrderFallback(CreateOrderRequest request, Exception ex) {
+        log.error("Order creation resilience limit triggered. User: {}, Error: {}",
+                request.getUserId(), ex.getMessage());
+        
+        Order order = new Order();
+        order.setUserId(request.getUserId());
+        order.setProductId(request.getProductId());
+        order.setQuantity(request.getQuantity());
+        order.setStatus(Order.OrderStatus.FAILED);
+        order = orderRepository.save(order);
+        
+        throw new RuntimeException("Order service temporarily unavailable. " +
+                "Too many concurrent orders or timeout. Please try again later.", ex);
     }
 }

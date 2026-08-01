@@ -66,10 +66,16 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 3
         # Automatically transition from OPEN to HALF_OPEN
         automatic-transition-from-open-to-half-open-enabled: true
+        # Record these exceptions as failures
+        record-exceptions:
+          - java.lang.RuntimeException
+          - java.lang.Exception
     instances:
       paymentService:
         baseConfig: default
       inventoryService:
+        baseConfig: default
+      orderOrchestration:
         baseConfig: default
   
   # RETRY CONFIGURATION
@@ -86,18 +92,80 @@ resilience4j:
         exponential-backoff-multiplier: 2
         # Maximum wait duration
         max-wait-duration: 10s
+        # Retry on transient failures
+        retry-exceptions:
+          - java.lang.RuntimeException
     instances:
       paymentService:
         baseConfig: default
       inventoryService:
         baseConfig: default
+      orderOrchestration:
+        baseConfig: default
+
+  # BULKHEAD CONFIGURATION - Isolates order orchestration
+  bulkhead:
+    configs:
+      default:
+        # Max concurrent order creations
+        max-concurrent-calls: 25
+        # Don't wait for threads
+        max-wait-duration: 0
+        thread-pool:
+          # Core threads for saga orchestration
+          core-thread-pool-size: 10
+          # Max threads if load spikes
+          max-thread-pool-size: 20
+          # Queue pending requests
+          queue-capacity: 15
+    instances:
+      orderOrchestration:
+        baseConfig: default
+      paymentService:
+        max-concurrent-calls: 15
+        max-wait-duration: 0
+        thread-pool:
+          core-thread-pool-size: 5
+          max-thread-pool-size: 10
+          queue-capacity: 8
+      inventoryService:
+        max-concurrent-calls: 20
+        max-wait-duration: 0
+        thread-pool:
+          core-thread-pool-size: 5
+          max-thread-pool-size: 15
+          queue-capacity: 10
+
+  # TIME LIMITER CONFIGURATION - Prevents hanging saga steps
+  timelimiter:
+    configs:
+      default:
+        # Timeout saga steps after 10 seconds
+        timeout-duration: 10s
+        # Cancel future if timeout
+        cancel-running-future: true
+      paymentCall:
+        # Payment calls should timeout faster (5 seconds)
+        timeout-duration: 5s
+        cancel-running-future: true
+      inventoryCall:
+        # Inventory calls should timeout faster (4 seconds)
+        timeout-duration: 4s
+        cancel-running-future: true
+    instances:
+      orderOrchestration:
+        baseConfig: default
+      paymentService:
+        baseConfig: paymentCall
+      inventoryService:
+        baseConfig: inventoryCall
 
 # ACTUATOR CONFIGURATION
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,circuitbreakers,retries
+        include: health,info,metrics,circuitbreakers,retries,bulkheads,timelimiters
   endpoint:
     health:
       show-details: always
